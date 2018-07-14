@@ -1,28 +1,48 @@
+SRC_DIR := src
+SRC_FILES := $(wildcard $(SRC_DIR)/*.c)
+BIN_DIR := bin
+BIN_FILES := $(patsubst $(SRC_DIR)/%.c,$(BIN_DIR)/%.o,$(SRC_FILES))
 
-ERL_EI_INCLUDE = $(shell erl -eval 'io:format("~s~n", [code:lib_dir(erl_interface, include)])' -s init stop -noshell)
-ERL_EI_LIB = $(shell erl -eval 'io:format("~s", [code:lib_dir(erl_interface, lib)])' -s init stop -noshell)
+LIB_ARGPARSE_DIR := lib/argparse
+LIB_ARGPARSE_SRC := $(LIB_ARGPARSE_DIR)/argparse.c
+LIB_ARGPARSE_BIN := bin/argparse.o
+LIB_DUKTAPE_DIR := lib/duktape
+LIB_DUKTAPE_SRC := $(LIB_DUKTAPE_DIR)/duktape.c
+LIB_DUKTAPE_BIN := bin/duktape.o
+LIB_EI_DIR := $(shell erl -eval 'io:format("~s~n", [code:lib_dir(erl_interface, include)])' -s init stop -noshell)
+LIB_EI := $(shell erl -eval 'io:format("~s", [code:lib_dir(erl_interface, lib)])' -s init stop -noshell)
 
-CFLAGS = -std=c11 -O3 -Wall -Wextra -fPIC 
+INCS := -I$(SRC_DIR) -I$(LIB_EI_DIR) -I$(LIB_ARGPARSE_DIR) -I$(LIB_DUKTAPE_DIR)
+LIBS := -lm -lerl_interface -lei -lpthread
 
-all: bin/erlm
+CFLAGS ?= -std=c11 -Wall -Wextra
 
-bin/erlm: bin src/erlm.c bin/argparse.o bin/duktape.o bin/timers.o bin/port.o
-	$(CC) $(CFLAGS) -L$(ERL_EI_LIB) -lm -lerl_interface -lei -lpthread -I$(ERL_EI_INCLUDE) -Ilib/duktape -Ilib/argparse src/erlm.c bin/port.o bin/timers.o bin/duktape.o bin/argparse.o -o bin/erlm
+ifeq ($(DEBUG_BUILD),1)
+	CFLAGS += -g -DDEBUG_BUILD
+else
+	CFLAGS += -O3
+endif
 
-bin/duktape.o: lib/duktape/duktape.c
-	$(CC) $(CFLAGS) -o bin/duktape.o -c lib/duktape/duktape.c
 
-bin/argparse.o: lib/argparse/argparse.c
-	$(CC) $(CFLAGS) -o bin/argparse.o -c lib/argparse/argparse.c
+.PHONY: all clean
 
-bin/timers.o: src/timers.c
-	$(CC) $(CFLAGS) -Ilib/duktape -o bin/timers.o -c src/timers.c
 
-bin/port.o: src/port.c
-	$(CC) $(CFLAGS) -o bin/port.o -c src/port.c
+all: $(BIN_DIR)/erlm
 
-bin:
-	mkdir -p bin
+$(BIN_DIR)/erlm: $(LIB_ARGPARSE_BIN) $(LIB_DUKTAPE_BIN) $(BIN_FILES)
+	$(CC) $(CFLAGS) -L$(LIB_EI) $(LIBS) -o $@ $^
+
+$(LIB_ARGPARSE_BIN): $(LIB_ARGPARSE_SRC) | $(BIN_DIR)
+	$(CC) $(CFLAGS) -c -o $(LIB_ARGPARSE_BIN) $(LIB_ARGPARSE_SRC)
+
+$(LIB_DUKTAPE_BIN): $(LIB_DUKTAPE_SRC) | $(BIN_DIR)
+	$(CC) $(CFLAGS) -c -o $(LIB_DUKTAPE_BIN) $(LIB_DUKTAPE_SRC)
+
+$(BIN_DIR)/%.o: $(SRC_DIR)/%.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
+
+$(BIN_DIR):
+	mkdir -p $@
 
 clean:
-	rm -rf bin
+	rm -Rf $(BIN_DIR)
