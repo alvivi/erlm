@@ -1,0 +1,4 @@
+*.beam
+bin
+elm-stuff
+examples/*/*.js
