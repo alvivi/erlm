@@ -75,8 +75,27 @@ void test_put_first_prop_name(void) {
   duk_destroy_heap(ctx);
 }
 
+void test_peval_file(void) {
+  char *content = "'foobar'";
+  char filename[] = "/tmp/erlmXXXXXX";
+  duk_context *ctx;
+  int fd;
+
+  fd = mkstemp(filename);
+  write(fd, content, strlen(content) + 1);
+  close(fd);
+  ctx = duk_create_heap_default();
+  duk_util_peval_file(ctx, filename);
+
+  TEST_CHECK(duk_is_string(ctx, -1));
+  TEST_CHECK(strcmp(duk_get_string(ctx, -1), "foobar") == 0);
+
+  duk_destroy_heap(ctx);
+}
+
 TEST_LIST = {{"unroll not an array", test_unroll_array_not_an_array},
              {"unroll an empty arra", test_unroll_array_empty},
              {"unroll", test_unroll_array},
              {"put first prop name", test_put_first_prop_name},
+             {"eval a file", test_peval_file},
              {NULL, NULL}};
