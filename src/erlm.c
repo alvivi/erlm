@@ -5,6 +5,7 @@
 
 #include "argparse.h"
 #include "duk_config.h"
+#include "duk_util.h"
 #include "duktape.h"
 #include "ei.h"
 #include "erl_interface.h"
@@ -361,21 +362,6 @@ void erlm_push_term(duk_context *ctx, ETERM *term) {
   abort();
 }
 
-int erlm_unroll_array(duk_context *ctx) {
-  // [JS Ctx] = [..., [a1, a2 ... an]] -> [..., a1, a2 ... an]
-  // TODO check array
-  int enum_index, count = 0;
-  duk_enum(ctx, -1, DUK_ENUM_ARRAY_INDICES_ONLY);
-  enum_index = duk_normalize_index(ctx, -1);
-  while (duk_next(ctx, enum_index, 1)) {
-    duk_remove(ctx, -2);
-    count += 1;
-  }
-  duk_remove(ctx, enum_index);
-  duk_remove(ctx, enum_index - 1);
-  return count;
-}
-
 void erlm_handle_input_event(duk_context *ctx, struct kevent *event) {
   ETERM *tuple;
   byte buffer[0xffff];
@@ -402,7 +388,7 @@ void erlm_handle_input_event(duk_context *ctx, struct kevent *event) {
   duk_get_prop_string(ctx, -1, port_name);
   duk_get_prop_string(ctx, -1, "send");
   erlm_push_term(ctx, erl_element(2, tuple));
-  arg_count = erlm_unroll_array(ctx);
+  arg_count = duk_util_unroll_array(ctx);
   duk_pcall(ctx, arg_count);
   duk_pop_n(ctx, 3);
 
