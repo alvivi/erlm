@@ -35,8 +35,11 @@ endif
 
 all: $(BIN_DIR)/erlm
 
+clean:
+	rm -Rf $(BIN_DIR)
+
 test: $(TESTS_BIN_FILES)
-	$^
+	echo $^ | xargs -n 1 sh -c
 
 $(BIN_DIR)/erlm: $(LIB_ARGPARSE_BIN) $(LIB_DUKTAPE_BIN) $(BIN_FILES)
 	$(CC) $(CFLAGS) -L$(LIB_EI) $(LIBS) -o $@ $^
@@ -51,13 +54,10 @@ $(BIN_DIR)/%.o: $(SRC_DIR)/%.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
 $(TESTS_BIN_DIR)/%: $(TESTS_DIR)/%.c $(LIB_ARGPARSE_BIN) $(LIB_DUKTAPE_BIN) $(BIN_NOMAIN_FILES) | $(TESTS_BIN_DIR)
-	$(CC) -L$(LIB_EI) $(LIBS) -I$(LIB_TESTS_SRC) -I$(SRC_DIR) -o $@ $^
+	$(CC) -L$(LIB_EI) $(LIBS) $(INCS) -I$(LIB_TESTS_SRC) -o $@ $^
 
 $(BIN_DIR):
 	mkdir -p $@
 
 $(TESTS_BIN_DIR):
 	mkdir -p $@
-
-clean:
-	rm -Rf $(BIN_DIR)
