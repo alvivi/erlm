@@ -8,7 +8,7 @@
 #include "duktape.h"
 #include "ei.h"
 #include "erl_interface.h"
-#include "port.h"
+#include "io.h"
 #include "timers.h"
 #include <fcntl.h>
 #include <pthread.h>
@@ -376,7 +376,7 @@ int erlm_unroll_array(duk_context *ctx) {
   return count;
 }
 
-void erlm_handle_input_event(duk_context *ctx, int qid, struct kevent *event) {
+void erlm_handle_input_event(duk_context *ctx, struct kevent *event) {
   ETERM *tuple;
   byte buffer[0xffff];
   int nbytes, arg_count;
@@ -385,9 +385,9 @@ void erlm_handle_input_event(duk_context *ctx, int qid, struct kevent *event) {
   if (event->ident != 0 || event->filter != EVFILT_READ) {
     return;
   }
-  fprintf(stderr, "INPUT MESSAGE %d\n", event->ident);
 
-  nbytes = erlm_packed2_read(0, buffer, event->data);
+  nbytes = io_read_packet2(0, buffer);
+  // TODO: check event->data
   // TODO: check nbytes
   // TODO: cehck types
   tuple = erl_decode(buffer);
@@ -441,12 +441,12 @@ void erlm_handle_output_event(struct kevent *event) {
   }
 
   packet = event->udata;
-  if (packet->size > event->data) {
+  if (packet->size > (size_t)event->data) {
     fprintf(stderr, "error: data is too big for write buffer");
     abort();
   }
 
-  erlm_packet2_write(1, packet->data, packet->size);
+  io_write_packet2(1, packet->data, packet->size);
   free(packet->data);
   free(packet);
 }
@@ -498,7 +498,7 @@ int do_something(struct erlm_config *config, const char *filepath) {
       }
 
       erlm_timers_handle_event(ctx, &event);
-      erlm_handle_input_event(ctx, qid, &event);
+      erlm_handle_input_event(ctx, &event);
       erlm_handle_output_event(&event);
     }
   }

@@ -1,7 +1,7 @@
 #include "io.h"
 #include <unistd.h>
 
-int io_read(int fd, void *buffer, int length) {
+int io_read(int fd, byte *buffer, int length) {
   int got_or_error, got = 0;
 
   do {
@@ -15,7 +15,7 @@ int io_read(int fd, void *buffer, int length) {
   return got;
 }
 
-int io_read_packet2(int fd, void *buffer) {
+int io_read_packet2(int fd, byte *buffer) {
   size_t length;
 
   if (io_read(fd, buffer, 2) != 2) {
@@ -25,7 +25,7 @@ int io_read_packet2(int fd, void *buffer) {
   return io_read(fd, buffer, length);
 }
 
-int io_write(int fd, void *buffer, int length) {
+int io_write(int fd, byte *buffer, int length) {
   int wrote_or_error, wrote = 0;
 
   do {
@@ -40,8 +40,8 @@ int io_write(int fd, void *buffer, int length) {
   return wrote;
 }
 
-int io_write_packet2(int fd, void *buffer, int length) {
-  int tmp;
+int io_write_packet2(int fd, byte *buffer, int length) {
+  byte tmp;
 
   tmp = (length >> 8) & 0xff;
   io_write(fd, &tmp, 1);

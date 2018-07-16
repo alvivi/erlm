@@ -66,8 +66,6 @@ void erlm_timers_handle_event(duk_context *ctx, struct kevent *event) {
     return;
   }
 
-  fprintf(stderr, "TIMER MESSAGE %d\n", event->ident);
-
   duk_push_global_stash(ctx);
   duk_get_prop_string(ctx, -1, "timeoutCallbacks");
   duk_get_prop_index(ctx, -1, event->ident);
