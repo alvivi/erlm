@@ -293,7 +293,7 @@ int do_something(struct erlm_config *config, const char *filepath) {
   }
 
   ctx = duk_elm_create_context(qid);
-  erlm_timers_register(ctx);
+  timers_register(ctx);
 
   result = duk_elm_peval_file(ctx, filepath);
   if (result != 0) {
@@ -328,7 +328,7 @@ int do_something(struct erlm_config *config, const char *filepath) {
         }
       }
 
-      erlm_timers_handle_event(ctx, &event);
+      timers_handle_event(ctx, &event);
       erlm_handle_input_event(ctx, &event);
       erlm_handle_output_event(&event);
     }

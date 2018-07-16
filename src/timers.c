@@ -1,9 +1,7 @@
 
 #include "timers.h"
 
-/* Duktape C Functions */
-
-static duk_ret_t erlm_set_timeout(duk_context *ctx) {
+static duk_ret_t timers_set_timeout(duk_context *ctx) {
   int arg_count, qid, last_id, timeout;
   struct kevent event;
 
@@ -48,7 +46,7 @@ static duk_ret_t erlm_set_timeout(duk_context *ctx) {
   return 1;
 }
 
-static duk_ret_t erlm_clear_timeout(duk_context *ctx) {
+static duk_ret_t timers_clear_timeout(duk_context *ctx) {
   int qid;
 
   duk_push_global_stash(ctx);
@@ -59,9 +57,7 @@ static duk_ret_t erlm_clear_timeout(duk_context *ctx) {
   return 0;
 }
 
-/* Public Functions */
-
-void erlm_timers_handle_event(duk_context *ctx, struct kevent *event) {
+void timers_handle_event(duk_context *ctx, struct kevent *event) {
   if (event->filter != EVFILT_TIMER) {
     return;
   }
@@ -77,7 +73,7 @@ void erlm_timers_handle_event(duk_context *ctx, struct kevent *event) {
   duk_pop_2(ctx);
 }
 
-void erlm_timers_register(duk_context *ctx) {
+void timers_register(duk_context *ctx) {
   duk_push_global_stash(ctx);
   duk_push_int(ctx, 0);
   duk_put_prop_string(ctx, -2, "lastId");
@@ -85,8 +81,8 @@ void erlm_timers_register(duk_context *ctx) {
   duk_put_prop_string(ctx, -2, "timeoutCallbacks");
   duk_pop(ctx);
 
-  duk_push_c_function(ctx, erlm_set_timeout, DUK_VARARGS);
+  duk_push_c_function(ctx, timers_set_timeout, DUK_VARARGS);
   duk_put_global_string(ctx, "setTimeout");
-  duk_push_c_function(ctx, erlm_clear_timeout, DUK_VARARGS);
+  duk_push_c_function(ctx, timers_clear_timeout, DUK_VARARGS);
   duk_put_global_string(ctx, "clearTimeout");
 }
