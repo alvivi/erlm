@@ -58,7 +58,25 @@ void test_unroll_array(void) {
   duk_destroy_heap(ctx);
 }
 
+void test_put_first_prop_name(void) {
+  duk_context *ctx;
+  int result;
+
+  ctx = duk_create_heap_default();
+
+  duk_push_object(ctx);
+  duk_push_string(ctx, "foo");
+  duk_put_prop_string(ctx, -2, "bar");
+  duk_util_put_first_prop_name(ctx);
+
+  TEST_CHECK(duk_is_string(ctx, -1));
+  TEST_CHECK(strcmp(duk_get_string(ctx, -1), "bar") == 0);
+
+  duk_destroy_heap(ctx);
+}
+
 TEST_LIST = {{"unroll not an array", test_unroll_array_not_an_array},
              {"unroll an empty arra", test_unroll_array_empty},
              {"unroll", test_unroll_array},
+             {"put first prop name", test_put_first_prop_name},
              {NULL, NULL}};
