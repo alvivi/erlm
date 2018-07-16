@@ -5,6 +5,7 @@
 
 #include "argparse.h"
 #include "duk_config.h"
+#include "duk_elm.h"
 #include "duk_util.h"
 #include "duktape.h"
 #include "ei.h"
@@ -43,162 +44,6 @@ void debug_stack(duk_context *ctx) {
   duk_push_context_dump(ctx);
   fprintf(stderr, "%s\n", duk_to_string(ctx, -1));
   duk_pop(ctx);
-}
-
-void erlm_put_first_prop_name(duk_context *ctx) {
-  duk_enum(ctx, -1, DUK_ENUM_OWN_PROPERTIES_ONLY);
-  duk_next(ctx, -1, 0);
-  duk_insert(ctx, -2);
-  duk_pop(ctx);
-}
-
-int erlm_is_input_port(duk_context *ctx) {
-  if (!duk_check_type(ctx, -1, DUK_TYPE_OBJECT)) {
-    return 0;
-  }
-  return duk_has_prop_string(ctx, -1, "send");
-}
-
-int erlm_is_output_port(duk_context *ctx) {
-  if (!duk_check_type(ctx, -1, DUK_TYPE_OBJECT)) {
-    return 0;
-  }
-  return duk_has_prop_string(ctx, -1, "subscribe") &&
-         duk_has_prop_string(ctx, -1, "unsubscribe");
-}
-
-int erlm_get_input_ports(duk_context *ctx, const char *ports[],
-                         int port_count) {
-  int nport = 0;
-
-  if (!duk_check_type(ctx, -1, DUK_TYPE_OBJECT)) {
-    return -1;
-  }
-  duk_get_prop_string(ctx, -1, "ports");
-  if (!duk_check_type(ctx, -1, DUK_TYPE_OBJECT)) {
-    return -1;
-  }
-  duk_enum(ctx, -1, DUK_ENUM_OWN_PROPERTIES_ONLY);
-  while (duk_next(ctx, -1, 1)) {
-    if (nport >= port_count) {
-      duk_pop_2(ctx);
-      break;
-    }
-    if (!erlm_is_input_port(ctx)) {
-      duk_pop_2(ctx);
-      continue;
-    }
-    ports[nport] = duk_to_string(ctx, -2);
-    nport += 1;
-    duk_pop_2(ctx);
-  }
-  duk_pop_2(ctx);
-  return nport;
-}
-
-int erlm_get_output_ports(duk_context *ctx, const char *ports[],
-                          int port_count) {
-  int nport = 0;
-
-  if (!duk_check_type(ctx, -1, DUK_TYPE_OBJECT)) {
-    return -1;
-  }
-  duk_get_prop_string(ctx, -1, "ports");
-  if (!duk_check_type(ctx, -1, DUK_TYPE_OBJECT)) {
-    return -1;
-  }
-  duk_enum(ctx, -1, DUK_ENUM_OWN_PROPERTIES_ONLY);
-  while (duk_next(ctx, -1, 1)) {
-    if (nport >= port_count) {
-      break;
-    }
-    if (!erlm_is_output_port(ctx)) {
-      duk_pop_2(ctx);
-      continue;
-    }
-    ports[nport] = duk_to_string(ctx, -2);
-    nport += 1;
-    duk_pop_2(ctx);
-  }
-  duk_pop_2(ctx);
-  return nport;
-}
-
-int erlm_peval_file(duk_context *ctx, const char *filepath) {
-  int fid, file_size, result;
-  const char *file_contents;
-
-  fid = open(filepath, O_RDONLY);
-  if (fid < 0) {
-    return -1;
-  }
-
-  file_size = lseek(fid, 0, SEEK_END);
-  if (file_size < 0) {
-    close(fid);
-    return -1;
-  }
-
-  file_contents = mmap(0, file_size, PROT_READ, MAP_PRIVATE, fid, 0);
-  if (file_contents == MAP_FAILED) {
-    close(fid);
-    return -1;
-  }
-
-  result = duk_peval_string(ctx, file_contents);
-
-  munmap((void *)file_contents, file_size);
-  close(fid);
-  return result;
-}
-
-int erlm_peval_commonjs_file(duk_context *ctx, const char *filepath) {
-  int result;
-
-  duk_push_object(ctx);
-  duk_put_global_string(ctx, "module");
-
-  result = erlm_peval_file(ctx, filepath);
-  if (result != 0) {
-    return -1;
-  }
-
-  duk_pop(ctx);
-  duk_get_global_string(ctx, "module");
-  duk_get_prop_string(ctx, -1, "exports");
-  duk_insert(ctx, -2);
-  duk_pop(ctx);
-  return 0;
-}
-
-int erlm_peval_elm_file(duk_context *ctx, const char *filepath) {
-  int result;
-
-  result = erlm_peval_commonjs_file(ctx, filepath);
-  if (result != 0) {
-    return result;
-  }
-
-  erlm_put_first_prop_name(ctx);
-  duk_get_prop(ctx, -2);
-  duk_push_string(ctx, "worker");
-  result = duk_pcall_prop(ctx, -2, 0);
-  duk_insert(ctx, -3);
-  duk_pop(ctx);
-  duk_pop(ctx);
-  return result;
-}
-
-duk_context *erlm_create_context(int qid) {
-  duk_context *ctx;
-  ctx = duk_create_heap_default();
-
-  duk_push_global_stash(ctx);
-  duk_push_int(ctx, qid);
-  duk_put_prop_string(ctx, -2, "qid");
-  duk_pop(ctx);
-
-  return ctx;
 }
 
 ETERM *erlm_get_term(duk_context *ctx, duk_idx_t idx) {
@@ -286,7 +131,7 @@ void erlm_subscribe_all_output_ports(struct erlm_config *config,
   const char *ports[MAX_PORT_COUNT];
   int ports_count;
 
-  ports_count = erlm_get_output_ports(ctx, ports, MAX_PORT_COUNT);
+  ports_count = duk_elm_get_output_ports(ctx, ports, MAX_PORT_COUNT);
   duk_get_prop_string(ctx, -1, "ports");
   for (int i = 0; i < ports_count; i++) {
     if (config->verbose) {
@@ -307,7 +152,7 @@ void erlm_print_ports_info(duk_context *ctx) {
   const char *ports[MAX_PORT_COUNT];
   int ports_count;
 
-  ports_count = erlm_get_input_ports(ctx, ports, MAX_PORT_COUNT);
+  ports_count = duk_elm_get_input_ports(ctx, ports, MAX_PORT_COUNT);
   fprintf(stderr, "Input ports (%d in total):\n", ports_count);
   for (int i = 0; i < ports_count; i++) {
     fprintf(stderr, "\t%s", ports[i]);
@@ -316,7 +161,7 @@ void erlm_print_ports_info(duk_context *ctx) {
     fprintf(stderr, "\n");
   }
 
-  ports_count = erlm_get_output_ports(ctx, ports, MAX_PORT_COUNT);
+  ports_count = duk_elm_get_output_ports(ctx, ports, MAX_PORT_COUNT);
   fprintf(stderr, "Output ports (%d in total):\n", ports_count);
   for (int i = 0; i < ports_count; i++) {
     fprintf(stderr, "\t%s", ports[i]);
@@ -447,10 +292,10 @@ int do_something(struct erlm_config *config, const char *filepath) {
     return -1;
   }
 
-  ctx = erlm_create_context(qid);
+  ctx = duk_elm_create_context(qid);
   erlm_timers_register(ctx);
 
-  result = erlm_peval_elm_file(ctx, filepath);
+  result = duk_elm_peval_file(ctx, filepath);
   if (result != 0) {
     if (duk_is_error(ctx, -1)) {
       fprintf(stderr, "error: %s\n", duk_safe_to_string(ctx, -1));
@@ -493,124 +338,6 @@ int do_something(struct erlm_config *config, const char *filepath) {
   close(qid);
   return 0;
 }
-
-/*
-
-
-struct erlm_vm_context {
-  int qid;
-  const char *filepath;
-};
-
-void *erlm_virtual_machine(void *vm_context) {
-  int qid;
-  const char *filepath;
-
-  qid = ((struct erlm_vm_context *)vm_context)->qid;
-  filepath = ((struct erlm_vm_context *)vm_context)->filepath;
-
-  int result;
-  duk_context *ctx = duk_create_heap_default();
-
-  duk_push_c_function(ctx, erlm_set_timeout, DUK_VARARGS);
-  duk_put_global_string(ctx, "setTimeout");
-  duk_push_c_function(ctx, erlm_clear_timeout, DUK_VARARGS);
-  duk_put_global_string(ctx, "clearTimeout");
-
-  result = erlm_peval_elm_file(ctx, filepath);
-  if (result != 0) {
-    if (duk_is_error(ctx, -1)) {
-      printf("error: %s\n", duk_safe_to_string(ctx, -1));
-    } else {
-      printf("error: cannot read file %s\n", filepath);
-    }
-    duk_destroy_heap(ctx);
-    exit(-1);
-  }
-
-  *
-   THIS WORKS
-  struct kevent event;
-
-  sleep(1);
-  printf("sending event 6969\n");
-  EV_SET(&event, 1, EVFILT_USER, EV_ADD | EV_ONESHOT, 0, 0, 0);
-  kevent((int)qid, &event, 1, NULL, 0, NULL);
-
-  EV_SET(&event, 1, EVFILT_USER, 0, NOTE_TRIGGER, 0, (void *)6969);
-  kevent((int)qid, &event, 1, NULL, 0, NULL);
-
-  [>sleep(2);<]
-  printf("sending event 9001\n");
-  EV_SET(&event, 2, EVFILT_USER, EV_ADD | EV_ONESHOT, 0, 0, 0);
-  kevent((int)qid, &event, 1, NULL, 0, NULL);
-
-  EV_SET(&event, 2, EVFILT_USER, 0, NOTE_TRIGGER, 0, (void *)9001);
-  kevent((int)qid, &event, 1, NULL, 0, NULL);*
-  return NULL;
-}
-
-int do_something(const char *filepath) {
-  *struct kevent change;*
-  struct kevent event;
-  struct erlm_vm_context vm_context;
-
-  int qid, event_count;
-  pthread_t vm;
-
-  if ((qid = kqueue()) == -1) {
-    abort();
-  }
-
-  vm_context.qid = qid;
-  vm_context.filepath = filepath;
-
-  pthread_create(&vm, NULL, *erlm_virtual_machine, (void *)&vm_context);
-
-  *EV_SET(&change, 1, EVFILT_TIMER, EV_ADD | EV_ENABLE, 0, 5000, 0);*
-
-  for (int i = 0; i < 10; i++) {
-    event_count = kevent(qid, NULL, 0, &event, 1, NULL);
-
-    if (event_count < 0) {
-      abort();
-    }
-    if (event_count > 0) {
-      if (event.flags & EV_ERROR) {
-        abort();
-      }
-    }
-
-    printf("got  %d\n", (int)event.udata);
-    *EV_SET(&change, 1, EVFILT_USER, EV_DELETE, 0, 0, NULL);*
-    *kevent(qid, &change, 1, NULL, 0, NULL);*
-  }
-
-  *
-  EVALUANDO ELM
-
-  int result;
-  duk_context *ctx = duk_create_heap_default();
-
-  result = erlm_peval_elm_file(ctx, filepath);
-  if (result != 0) {
-    if (duk_is_error(ctx, -1)) {
-      printf("error: %s\n", duk_safe_to_string(ctx, -1));
-    } else {
-      printf("error: cannot read file %s\n", filepath);
-    }
-    duk_destroy_heap(ctx);
-    exit(-1);
-  }
-
-  printf("numer of elems: %d\n", duk_get_top(ctx));
-  printf("result %d\n", result);
-  duk_destroy_heap(ctx);
-  *
-
-  return 0;
-}
-*/
 
 void erlm_config_set_defaults(struct erlm_config *config) {
   config->no_run = 0;
