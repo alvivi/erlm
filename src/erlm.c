@@ -6,6 +6,7 @@
 #include "argparse.h"
 #include "duk_config.h"
 #include "duk_elm.h"
+#include "duk_erlang.h"
 #include "duk_util.h"
 #include "duktape.h"
 #include "ei.h"
@@ -46,45 +47,6 @@ void debug_stack(duk_context *ctx) {
   duk_pop(ctx);
 }
 
-ETERM *erlm_get_term(duk_context *ctx, duk_idx_t idx) {
-  switch (duk_get_type(ctx, idx)) {
-  case DUK_TYPE_BOOLEAN:
-    if (duk_get_boolean(ctx, idx)) {
-      return erl_mk_atom("true");
-    }
-    return erl_mk_atom("false");
-  case DUK_TYPE_NUMBER:
-    return erl_mk_float(duk_get_number(ctx, idx));
-  case DUK_TYPE_STRING:
-    return erl_mk_string(duk_get_string(ctx, idx));
-  case DUK_TYPE_OBJECT:
-    if (duk_is_array(ctx, idx)) {
-      ETERM *list = erl_mk_empty_list();
-      duk_enum(ctx, idx, DUK_ENUM_ARRAY_INDICES_ONLY);
-      while (duk_next(ctx, -1, 1)) {
-        list = erl_cons(erlm_get_term(ctx, -1), list);
-        duk_pop_2(ctx);
-      }
-      duk_pop(ctx);
-      return list;
-    } else {
-      ETERM *keyword_list = erl_mk_empty_list();
-      ETERM *tuple_values[2];
-      duk_enum(ctx, idx, DUK_ENUM_OWN_PROPERTIES_ONLY);
-      while (duk_next(ctx, -1, 1)) {
-        tuple_values[0] = erl_mk_string(duk_get_string(ctx, -2));
-        tuple_values[1] = erlm_get_term(ctx, -1);
-        keyword_list = erl_cons(erl_mk_tuple(tuple_values, 2), keyword_list);
-        duk_pop_2(ctx);
-      }
-      duk_pop(ctx);
-      return keyword_list;
-    }
-  default:
-    return erl_mk_atom("nil");
-  }
-}
-
 duk_ret_t erlm_output_port_handler(duk_context *ctx) {
   ETERM *term;
   byte *buffer;
@@ -110,7 +72,7 @@ duk_ret_t erlm_output_port_handler(duk_context *ctx) {
   qid = duk_get_int(ctx, -1);
   duk_pop_2(ctx);
 
-  term = erlm_get_term(ctx, -1);
+  term = duk_erlang_get_term(ctx, -1);
   term_size = erl_term_len(term);
   buffer = malloc(term_size);
   erl_encode(term, buffer);
@@ -177,36 +139,6 @@ void erlm_listen_input_event(int qid) {
   kevent(qid, &event, 1, NULL, 0, NULL);
 }
 
-void erlm_push_term(duk_context *ctx, ETERM *term) {
-  duk_idx_t array_index;
-  int list_length;
-  if (ERL_IS_INTEGER(term)) {
-    duk_push_int(ctx, ERL_INT_VALUE(term));
-    return;
-  }
-  if (ERL_IS_UNSIGNED_INTEGER(term)) {
-    duk_push_int(ctx, ERL_INT_VALUE(term));
-    return;
-  }
-  if (ERL_IS_FLOAT(term)) {
-    duk_push_number(ctx, ERL_FLOAT_VALUE(term));
-    return;
-  }
-  if (ERL_IS_LIST(term)) {
-    list_length = erl_length(term);
-    array_index = duk_push_array(ctx);
-    for (int i = 0; i < list_length; i++) {
-      erlm_push_term(ctx, erl_hd(term));
-      duk_put_prop_index(ctx, array_index, i);
-      term = erl_tl(term);
-    }
-    return;
-  }
-
-  fprintf(stderr, "error: unsupported term type\n");
-  abort();
-}
-
 void erlm_handle_input_event(duk_context *ctx, struct kevent *event) {
   ETERM *tuple;
   byte buffer[0xffff];
@@ -232,7 +164,7 @@ void erlm_handle_input_event(duk_context *ctx, struct kevent *event) {
   duk_get_prop_string(ctx, -1, "ports");
   duk_get_prop_string(ctx, -1, port_name);
   duk_get_prop_string(ctx, -1, "send");
-  erlm_push_term(ctx, erl_element(2, tuple));
+  duk_erlang_push_term(ctx, erl_element(2, tuple));
   arg_count = duk_util_unroll_array(ctx);
   duk_pcall(ctx, arg_count);
   duk_pop_n(ctx, 3);
