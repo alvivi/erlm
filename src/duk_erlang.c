@@ -1,5 +1,45 @@
 #include "duk_erlang.h"
 
+ETERM *duk_erlang_get_array(duk_context *ctx, duk_idx_t idx) {
+  int array_index = 0;
+  duk_size_t array_length;
+  ETERM **buffer;
+  ETERM *list;
+
+  array_index = 0;
+  array_length = duk_get_length(ctx, idx);
+  buffer = malloc(sizeof(ETERM *) * array_length);
+  list = erl_mk_empty_list();
+  duk_enum(ctx, idx, DUK_ENUM_ARRAY_INDICES_ONLY);
+  while (duk_next(ctx, -1, 1)) {
+    buffer[array_index] = duk_erlang_get_term(ctx, -1);
+    duk_pop_2(ctx);
+    array_index += 1;
+  }
+  duk_pop(ctx);
+  for (array_index = array_length - 1; array_index >= 0; array_index--) {
+    list = erl_cons(buffer[array_index], list);
+  }
+  free(buffer);
+  return list;
+}
+
+ETERM *duk_erlang_get_object(duk_context *ctx, duk_idx_t idx) {
+  ETERM *keyword_list;
+  ETERM *tuple_values[2];
+
+  keyword_list = erl_mk_empty_list();
+  duk_enum(ctx, idx, DUK_ENUM_OWN_PROPERTIES_ONLY);
+  while (duk_next(ctx, -1, 1)) {
+    tuple_values[0] = erl_mk_string(duk_get_string(ctx, -2));
+    tuple_values[1] = duk_erlang_get_term(ctx, -1);
+    keyword_list = erl_cons(erl_mk_tuple(tuple_values, 2), keyword_list);
+    duk_pop_2(ctx);
+  }
+  duk_pop(ctx);
+  return keyword_list;
+}
+
 ETERM *duk_erlang_get_term(duk_context *ctx, duk_idx_t idx) {
   switch (duk_get_type(ctx, idx)) {
   case DUK_TYPE_UNDEFINED:
@@ -17,34 +57,9 @@ ETERM *duk_erlang_get_term(duk_context *ctx, duk_idx_t idx) {
     return erl_mk_string(duk_get_string(ctx, idx));
   case DUK_TYPE_OBJECT:
     if (duk_is_array(ctx, idx)) {
-      int array_index = 0;
-      duk_size_t array_length = duk_get_length(ctx, idx);
-      ETERM **buffer = malloc(sizeof(ETERM *) * array_length);
-      ETERM *list = erl_mk_empty_list();
-      duk_enum(ctx, idx, DUK_ENUM_ARRAY_INDICES_ONLY);
-      while (duk_next(ctx, -1, 1)) {
-        buffer[array_index] = duk_erlang_get_term(ctx, -1);
-        duk_pop_2(ctx);
-        array_index += 1;
-      }
-      duk_pop(ctx);
-      for (array_index = array_length - 1; array_index >= 0; array_index--) {
-        list = erl_cons(buffer[array_index], list);
-      }
-      free(buffer);
-      return list;
+      return duk_erlang_get_array(ctx, idx);
     } else {
-      ETERM *keyword_list = erl_mk_empty_list();
-      ETERM *tuple_values[2];
-      duk_enum(ctx, idx, DUK_ENUM_OWN_PROPERTIES_ONLY);
-      while (duk_next(ctx, -1, 1)) {
-        tuple_values[0] = erl_mk_string(duk_get_string(ctx, -2));
-        tuple_values[1] = duk_erlang_get_term(ctx, -1);
-        keyword_list = erl_cons(erl_mk_tuple(tuple_values, 2), keyword_list);
-        duk_pop_2(ctx);
-      }
-      duk_pop(ctx);
-      return keyword_list;
+      return duk_erlang_get_object(ctx, idx);
     }
   default:
     return erl_mk_atom("undefined");
