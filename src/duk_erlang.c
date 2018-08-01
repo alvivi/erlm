@@ -66,8 +66,32 @@ ETERM *duk_erlang_get_term(duk_context *ctx, duk_idx_t idx) {
   }
 }
 
+int duk_erlang_is_object_alike(ETERM *term) {
+  int list_length;
+  ETERM *elem;
+
+  if (!ERL_IS_LIST(term)) {
+    return 0;
+  }
+  list_length = erl_length(term);
+  for (int i = 0; i < list_length; i++) {
+    elem = erl_hd(term);
+    if (!ERL_IS_TUPLE(elem) || ERL_TUPLE_SIZE(elem) != 2) {
+      return 0;
+    }
+    if (!ERL_IS_ATOM(erl_element(1, elem))) {
+      return 0;
+    }
+    term = erl_tl(term);
+  }
+
+  return 1;
+}
+
 void duk_erlang_push_term(duk_context *ctx, ETERM *term) {
   duk_idx_t array_index;
+  ETERM *elem;
+  char *prop_name;
   int list_length;
   if (ERL_IS_INTEGER(term)) {
     duk_push_int(ctx, ERL_INT_VALUE(term));
@@ -81,7 +105,39 @@ void duk_erlang_push_term(duk_context *ctx, ETERM *term) {
     duk_push_number(ctx, ERL_FLOAT_VALUE(term));
     return;
   }
+  if (ERL_IS_ATOM(term)) {
+    duk_push_string(ctx, ERL_ATOM_PTR_UTF8(term));
+    return;
+  }
+  if (ERL_IS_TUPLE(term)) {
+    duk_push_array(ctx);
+    for (int i = 0; i < ERL_TUPLE_SIZE(term); i++) {
+      duk_erlang_push_term(ctx, erl_element(i + 1, term));
+      duk_put_prop_index(ctx, -2, i);
+    }
+    return;
+  }
+  if (ERL_IS_BINARY(term)) {
+    duk_push_lstring(ctx, (char *)ERL_BIN_PTR(term), ERL_BIN_SIZE(term));
+    return;
+  }
   if (ERL_IS_LIST(term)) {
+    if (erl_iolist_length(term) >= 0) {
+      duk_push_string(ctx, erl_iolist_to_string(term));
+      return;
+    }
+    if (duk_erlang_is_object_alike(term)) {
+      list_length = erl_length(term);
+      array_index = duk_push_array(ctx);
+      for (int i = 0; i < list_length; i++) {
+        elem = erl_hd(term);
+        prop_name = ERL_ATOM_PTR_UTF8(erl_element(1, elem));
+        duk_erlang_push_term(ctx, erl_element(2, elem));
+        duk_put_prop_string(ctx, array_index, prop_name);
+        term = erl_tl(term);
+      }
+      return;
+    }
     list_length = erl_length(term);
     array_index = duk_push_array(ctx);
     for (int i = 0; i < list_length; i++) {
