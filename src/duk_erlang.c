@@ -2,6 +2,10 @@
 
 ETERM *duk_erlang_get_term(duk_context *ctx, duk_idx_t idx) {
   switch (duk_get_type(ctx, idx)) {
+  case DUK_TYPE_UNDEFINED:
+    return erl_mk_atom("undefined");
+  case DUK_TYPE_NULL:
+    return erl_mk_atom("null");
   case DUK_TYPE_BOOLEAN:
     if (duk_get_boolean(ctx, idx)) {
       return erl_mk_atom("true");
@@ -35,7 +39,7 @@ ETERM *duk_erlang_get_term(duk_context *ctx, duk_idx_t idx) {
       return keyword_list;
     }
   default:
-    return erl_mk_atom("nil");
+    return erl_mk_atom("undefined");
   }
 }
 
