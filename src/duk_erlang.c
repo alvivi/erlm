@@ -17,13 +17,21 @@ ETERM *duk_erlang_get_term(duk_context *ctx, duk_idx_t idx) {
     return erl_mk_string(duk_get_string(ctx, idx));
   case DUK_TYPE_OBJECT:
     if (duk_is_array(ctx, idx)) {
+      int array_index = 0;
+      duk_size_t array_length = duk_get_length(ctx, idx);
+      ETERM **buffer = malloc(sizeof(ETERM *) * array_length);
       ETERM *list = erl_mk_empty_list();
       duk_enum(ctx, idx, DUK_ENUM_ARRAY_INDICES_ONLY);
       while (duk_next(ctx, -1, 1)) {
-        list = erl_cons(duk_erlang_get_term(ctx, -1), list);
+        buffer[array_index] = duk_erlang_get_term(ctx, -1);
         duk_pop_2(ctx);
+        array_index += 1;
       }
       duk_pop(ctx);
+      for (array_index = array_length - 1; array_index >= 0; array_index--) {
+        list = erl_cons(buffer[array_index], list);
+      }
+      free(buffer);
       return list;
     } else {
       ETERM *keyword_list = erl_mk_empty_list();
