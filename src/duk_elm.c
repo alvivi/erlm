@@ -1,13 +1,13 @@
 #include "duk_elm.h"
 #include "duk_util.h"
 
-duk_context *duk_elm_create_context(int qid) {
+duk_context *duk_elm_create_context(int events_manager) {
   duk_context *ctx;
   ctx = duk_create_heap_default();
 
   duk_push_global_stash(ctx);
-  duk_push_int(ctx, qid);
-  duk_put_prop_string(ctx, -2, "qid");
+  duk_push_int(ctx, events_manager);
+  duk_put_prop_string(ctx, -2, "eventsManager");
   duk_pop(ctx);
 
   return ctx;

@@ -7,18 +7,13 @@
 #include "duk_config.h"
 #include "duk_elm.h"
 #include "duk_erlang.h"
+#include "duk_timers.h"
 #include "duk_util.h"
 #include "duktape.h"
 #include "ei.h"
 #include "erl_interface.h"
+#include "events.h"
 #include "io.h"
-#include "timers.h"
-#include <fcntl.h>
-#include <pthread.h>
-#include <stdio.h>
-#include <sys/event.h>
-#include <sys/mman.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 #define MAX_PORT_COUNT 128
@@ -51,8 +46,7 @@ duk_ret_t erlm_output_port_handler(duk_context *ctx) {
   ETERM *term;
   byte *buffer;
   const char *port_name;
-  int term_size, qid;
-  struct kevent event;
+  int term_size, events_manager;
   struct packet *packet;
 
   fprintf(stderr, "OUTPUT PORT\n");
@@ -68,8 +62,8 @@ duk_ret_t erlm_output_port_handler(duk_context *ctx) {
 
   // [c] qid = [js] global.qid;
   duk_push_global_stash(ctx);
-  duk_get_prop_string(ctx, -1, "qid");
-  qid = duk_get_int(ctx, -1);
+  duk_get_prop_string(ctx, -1, "eventsManager");
+  events_manager = duk_get_int(ctx, -1);
   duk_pop_2(ctx);
 
   term = duk_erlang_get_term(ctx, -1);
@@ -82,8 +76,7 @@ duk_ret_t erlm_output_port_handler(duk_context *ctx) {
   packet->size = term_size;
   packet->data = buffer;
 
-  EV_SET(&event, 1, EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, packet);
-  kevent((int)qid, &event, 1, NULL, 0, NULL);
+  events_subscribe_write(events_manager, 1, packet);
 
   return 0;
 }
@@ -133,19 +126,17 @@ void erlm_print_ports_info(duk_context *ctx) {
   }
 }
 
-void erlm_listen_input_event(int qid) {
-  struct kevent event;
-  EV_SET(&event, 0, EVFILT_READ, EV_ADD, 0, 0, NULL);
-  kevent(qid, &event, 1, NULL, 0, NULL);
+void erlm_listen_input_event(int events_manager) {
+  events_subscribe_read(events_manager, 0, NULL);
 }
 
-void erlm_handle_input_event(duk_context *ctx, struct kevent *event) {
+void erlm_handle_input_event(duk_context *ctx, struct event *event) {
   ETERM *tuple;
   byte buffer[0xffff];
   int nbytes, arg_count;
   const char *port_name;
 
-  if (event->ident != 0 || event->filter != EVFILT_READ) {
+  if (event->id != 0 || event->type != EVENT_READ) {
     return;
   }
 
@@ -197,13 +188,13 @@ void erlm_handle_input_event(duk_context *ctx, struct kevent *event) {
   erl_free_compound(tuple);
 }
 
-void erlm_handle_output_event(struct kevent *event) {
+void erlm_handle_output_event(struct event *event) {
   struct packet *packet;
-  if (event->ident != 1 || event->filter != EVFILT_WRITE) {
+  if (event->id != 1 || event->type != EVENT_WRITE) {
     return;
   }
 
-  packet = event->udata;
+  packet = event->data;
   if (packet->size > (size_t)event->data) {
     fprintf(stderr, "error: data is too big for write buffer");
     abort();
@@ -216,16 +207,16 @@ void erlm_handle_output_event(struct kevent *event) {
 
 int do_something(struct erlm_config *config, const char *filepath) {
   duk_context *ctx;
-  int qid, event_count, result;
-  struct kevent event;
+  int events_manager, event_count, result;
+  struct event *event;
 
-  if ((qid = kqueue()) == -1) {
-    fprintf(stderr, "error: kqueue cannot be initialized\n");
+  if ((events_manager = events_create_manager()) == -1) {
+    fprintf(stderr, "error: events manager cannot be initialized\n");
     return -1;
   }
 
-  ctx = duk_elm_create_context(qid);
-  timers_register(ctx);
+  ctx = duk_elm_create_context(events_manager);
+  duk_timers_register(ctx, events_manager);
 
   result = duk_elm_peval_file(ctx, filepath);
   if (result != 0) {
@@ -235,7 +226,7 @@ int do_something(struct erlm_config *config, const char *filepath) {
       fprintf(stderr, "error: cannot read file %s\n", filepath);
     }
     duk_destroy_heap(ctx);
-    close(qid);
+    close(events_manager);
     return result;
   }
 
@@ -245,29 +236,23 @@ int do_something(struct erlm_config *config, const char *filepath) {
 
   if (!config->no_run) {
     erlm_subscribe_all_output_ports(config, ctx);
-    erlm_listen_input_event(qid);
+    erlm_listen_input_event(events_manager);
 
     for (int i = 0; i < 10; i++) {
-
-      event_count = kevent(qid, NULL, 0, &event, 1, NULL);
+      event_count = events_wait(events_manager, &event, 1);
 
       if (event_count < 0) {
         break;
       }
-      if (event_count > 0) {
-        if (event.flags & EV_ERROR) {
-          break;
-        }
-      }
 
-      timers_handle_event(ctx, &event);
-      erlm_handle_input_event(ctx, &event);
-      erlm_handle_output_event(&event);
+      duk_timers_handle_event(ctx, event);
+      erlm_handle_input_event(ctx, event);
+      erlm_handle_output_event(event);
     }
   }
 
   duk_destroy_heap(ctx);
-  close(qid);
+  close(events_manager);
   return 0;
 }
 
