@@ -2,12 +2,6 @@
 #include "duk_timers.h"
 #include "events.h"
 
-void debug_stack(duk_context *ctx) {
-  duk_push_context_dump(ctx);
-  fprintf(stderr, "%s\n", duk_to_string(ctx, -1));
-  duk_pop(ctx);
-}
-
 static duk_ret_t duk_timers_set_timeout(duk_context *ctx) {
   int arg_count, events_manager, timeout, timer_id;
 
