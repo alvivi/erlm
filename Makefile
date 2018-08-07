@@ -32,7 +32,6 @@ endif
 
 .PHONY: all clean test
 
-
 all: $(BIN_DIR)/erlm
 
 clean:
@@ -42,7 +41,7 @@ test: $(TESTS_BIN_FILES)
 	echo $^ | xargs -n 1 sh -c
 
 $(BIN_DIR)/erlm: $(LIB_ARGPARSE_BIN) $(LIB_DUKTAPE_BIN) $(BIN_FILES)
-	$(CC) $(CFLAGS) -L$(LIB_EI) $(LIBS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ -L$(LIB_EI) $(LIBS)
 
 $(LIB_ARGPARSE_BIN): $(LIB_ARGPARSE_SRC) | $(BIN_DIR)
 	$(CC) $(CFLAGS) -c -o $(LIB_ARGPARSE_BIN) $(LIB_ARGPARSE_SRC)
