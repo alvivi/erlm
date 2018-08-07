@@ -188,21 +188,17 @@ void erlm_handle_input_event(duk_context *ctx, struct event *event) {
   erl_free_compound(tuple);
 }
 
-void erlm_handle_output_event(struct event *event) {
+void erlm_handle_output_event(int events_manager, struct event *event) {
   struct packet *packet;
   if (event->id != 1 || event->type != EVENT_WRITE) {
     return;
   }
 
   packet = event->data;
-  if (packet->size > (size_t)event->data) {
-    fprintf(stderr, "error: data is too big for write buffer");
-    abort();
-  }
-
   io_write_packet2(1, packet->data, packet->size);
   free(packet->data);
   free(packet);
+  events_unsubscribe(events_manager, event);
 }
 
 int do_something(struct erlm_config *config, const char *filepath) {
@@ -247,7 +243,7 @@ int do_something(struct erlm_config *config, const char *filepath) {
 
       duk_timers_handle_event(ctx, event);
       erlm_handle_input_event(ctx, event);
-      erlm_handle_output_event(event);
+      erlm_handle_output_event(events_manager, event);
     }
   }
 
