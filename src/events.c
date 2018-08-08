@@ -1,9 +1,12 @@
+
 #include "events.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
 #ifdef __linux__
+
+#define _POSIX_C_SOURCE 199309L
 
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
