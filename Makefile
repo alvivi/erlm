@@ -53,7 +53,7 @@ $(BIN_DIR)/%.o: $(SRC_DIR)/%.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
 $(TESTS_BIN_DIR)/%: $(TESTS_DIR)/%.c $(LIB_ARGPARSE_BIN) $(LIB_DUKTAPE_BIN) $(BIN_NOMAIN_FILES) | $(TESTS_BIN_DIR)
-	$(CC) -L$(LIB_EI) $(LIBS) $(INCS) -I$(LIB_TESTS_SRC) -o $@ $^
+	$(CC) -L$(LIB_EI) $(INCS) -I$(LIB_TESTS_SRC) -o $@ $^ $(LIBS)
 
 $(BIN_DIR):
 	mkdir -p $@
