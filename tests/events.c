@@ -29,6 +29,18 @@ void test_timeout_event(void) {
   events_free(event);
 }
 
+void test_timeout_zero_event(void) {
+  int manager;
+  struct event *event;
+
+  manager = events_create_manager();
+  events_send_timeout(manager, 0, (void *)9001);
+  events_wait(manager, &event, 1);
+  TEST_CHECK(event->type == EVENT_TIMER);
+  TEST_CHECK(event->data == (void *)9001);
+  events_free(event);
+}
+
 void test_read_event(void) {
   int fd[2], manager;
   const char *src = "To The Moon\n", buffer[256];
@@ -65,6 +77,7 @@ void test_write_event(void) {
 
 TEST_LIST = {{"custom event", test_custom_event},
              {"timeout event", test_timeout_event},
+             {"timeout zero event", test_timeout_zero_event},
              {"read event", test_read_event},
              {"write event", test_write_event},
              {NULL, NULL}};
