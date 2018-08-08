@@ -18,14 +18,6 @@
 
 #define MAX_PORT_COUNT 128
 
-static const char *const usage[] = {"erlm [options] path/to/compiled-elm.js"};
-
-static const char *const description =
-    "\nWraps an elm application into an erlang port";
-
-static const char *const more_info =
-    "\nMore info at https://github.com/alvivi/erlm";
-
 struct erlm_config {
   int no_run;
   int verbose;
@@ -133,14 +125,14 @@ void erlm_listen_input_event(int events_manager) {
 void erlm_handle_input_event(duk_context *ctx, struct event *event) {
   ETERM *tuple;
   byte buffer[0xffff];
-  int nbytes, arg_count;
+  int arg_count;
   const char *port_name;
 
   if (event->id != 0 || event->type != EVENT_READ) {
     return;
   }
 
-  nbytes = io_read_packet2(0, buffer);
+  io_read_packet2(0, buffer);
   // TODO: check event->data
   // TODO: check nbytes
   // TODO: cehck types
@@ -169,7 +161,7 @@ void erlm_handle_input_event(duk_context *ctx, struct event *event) {
   /*duk_get_prop_string(ctx, -1, "send");*/
   /*duk_push_number(ctx, 69);*/
   /*duk_pcall(ctx, 1);*/
-  debug_stack(ctx);
+  /*debug_stack(ctx);*/
   /*
     duk_get_prop_string(ctx, -1, "apply");
     duk_dup(ctx, -2);
@@ -257,6 +249,17 @@ void erlm_config_set_defaults(struct erlm_config *config) {
   config->verbose = 0;
 }
 
+static const char *const usage[] = {
+    "erlm [options] path/to/compiled-elm.js",
+    NULL,
+};
+
+static const char *const description =
+    "\nWraps an elm application into an erlang port";
+
+static const char *const more_info =
+    "\nMore info at https://github.com/alvivi/erlm";
+
 int main(int argc, const char **argv) {
   struct erlm_config config;
   struct argparse_option options[] = {
@@ -265,7 +268,8 @@ int main(int argc, const char **argv) {
                   "avoid running the elm program", NULL, 0, 0),
       OPT_BOOLEAN('v', "verbose", &config.verbose,
                   "prints logging information to the stderr", NULL, 0, 0),
-      OPT_END()};
+      OPT_END(),
+  };
   struct argparse argparse;
 
   erl_init(NULL, 0);
