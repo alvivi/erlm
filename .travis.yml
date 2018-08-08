@@ -1,5 +1,5 @@
-script: make test
+script: CFLAGS=-std=gnu99 make test
 language: c
 before_install:
   - sudo apt-get update -qq
-  - sudo apt-get install erlang build-essential
+  - sudo apt-get install erlang
