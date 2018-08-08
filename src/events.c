@@ -19,22 +19,17 @@ void events_free(struct event *event) {
   free(event);
 }
 
-int events_send_custom(int manager, void *data) {
+int events_send_raw_custom(int manager, struct event *event) {
   int fd;
   uint64_t buffer;
   struct epoll_event native_event;
-  struct event *event;
 
   fd = eventfd(0, EFD_NONBLOCK);
   if (fd == -1) {
     return -1;
   }
 
-  event = malloc(sizeof(struct event));
-  event->type = EVENT_CUSTOM;
   event->id = fd;
-  event->data = data;
-
   native_event.data.ptr = event;
   native_event.events = EPOLLIN | EPOLLONESHOT;
   if (epoll_ctl(manager, EPOLL_CTL_ADD, fd, &native_event) == -1) {
@@ -44,16 +39,43 @@ int events_send_custom(int manager, void *data) {
   }
 
   buffer = 1;
-  write(fd, &buffer, sizeof(uint64_t));
+  buffer = write(fd, &buffer, sizeof(uint64_t));
 
   return fd;
 }
 
+int events_send_custom(int manager, void *data) {
+  int result;
+  struct event *event;
+
+  event = malloc(sizeof(struct event));
+  event->type = EVENT_CUSTOM;
+  event->data = data;
+
+  result = events_send_raw_custom(manager, event);
+  if (result < 0) {
+    free(event);
+  }
+  return result;
+}
+
 int events_send_timeout(int manager, int timeout, void *data) {
-  int fd;
+  int fd, result;
   struct itimerspec ts;
   struct epoll_event native_event;
   struct event *event;
+
+  event = malloc(sizeof(struct event));
+  event->type = EVENT_TIMER;
+  event->data = data;
+
+  if (timeout <= 0) {
+    result = events_send_raw_custom(manager, event);
+    if (result < 0) {
+      free(event);
+    }
+    return result;
+  }
 
   ts.it_interval.tv_sec = 0;
   ts.it_interval.tv_nsec = 0;
@@ -70,10 +92,7 @@ int events_send_timeout(int manager, int timeout, void *data) {
     return -1;
   }
 
-  event = malloc(sizeof(struct event));
-  event->type = EVENT_TIMER;
   event->id = fd;
-  event->data = data;
 
   native_event.data.ptr = event;
   native_event.events = EPOLLIN | EPOLLONESHOT;
